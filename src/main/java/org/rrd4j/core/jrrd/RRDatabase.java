@@ -23,15 +23,17 @@ import java.util.Set;
  */
 public class RRDatabase {
 
-    RRDFile rrdFile;
+    final RRDFile rrdFile;
 
     // RRD file name
-    private String name;
-    Header header;
-    private ArrayList<DataSource> dataSources;
-    private ArrayList<Archive> archives;
-    Date lastUpdate;
-    private Map<String, Integer> nameindex;
+    private final String name;
+    final Header header;
+    private final ArrayList<DataSource> dataSources;
+    private final ArrayList<Archive> archives;
+    /** Timestamp of last data modification */
+    final Date lastUpdate;
+    /** Data source name to index */
+    private final Map<String, Integer> nameindex;
 
     /**
      * Creates a database to read from.
@@ -291,13 +293,13 @@ public class RRDatabase {
      * <p>getData.</p>
      *
      * @param type a {@link org.rrd4j.core.jrrd.ConsolidationFunctionType} object.
-     * @param start a long.
-     * @param end a long.
-     * @param step a long.
+     * @param startTime seconds since epoch
+     * @param endTime seconds since epoch
+     * @param stepSeconds in seconds
      * @return a {@link org.rrd4j.core.jrrd.DataChunk} object.
      * @throws java.io.IOException if any.
      */
-    public DataChunk getData(ConsolidationFunctionType type, long start, long end, long step)
+    public DataChunk getData(ConsolidationFunctionType type, long startTime, long endTime, long stepSeconds)
     throws IOException {
         
         ArrayList<Archive> possibleArchives = getArchiveList(type);
@@ -307,28 +309,28 @@ public class RRDatabase {
                     + type);
         }
 
-        Archive archive = findBestArchive(start, end, step, possibleArchives);
+        Archive archive = findBestArchive(startTime, endTime, stepSeconds, possibleArchives);
 
         // Tune the parameters
-        step = header.pdpStep * archive.pdpCount;
-        start -= start % step;
+        stepSeconds = header.pdpStep * archive.pdpCount;
+        startTime -= startTime % stepSeconds;
 
-        if (end % step != 0) {
-            end += step - end % step;
+        if (endTime % stepSeconds != 0) {
+            endTime += stepSeconds - endTime % stepSeconds;
         }
 
-        int rows = (int) ((end - start) / step + 1);
+        int rows = (int) ((endTime - startTime) / stepSeconds + 1);
 
         // Find start and end offsets
         // This is terrible - some of this should be encapsulated in Archive - CT.
         long lastUpdateLong = lastUpdate.getTime() / 1000;
-        long archiveEndTime = lastUpdateLong - (lastUpdateLong % step);
-        long archiveStartTime = archiveEndTime - (step * (archive.rowCount - 1));
-        int startOffset = (int) ((start - archiveStartTime) / step);
-        int endOffset = (int) ((archiveEndTime - end) / step);
+        long archiveEndTime = lastUpdateLong - (lastUpdateLong % stepSeconds);
+        long archiveStartTime = archiveEndTime - (stepSeconds * (archive.rowCount - 1));
+        int startOffset = (int) ((startTime - archiveStartTime) / stepSeconds);
+        int endOffset = (int) ((archiveEndTime - endTime) / stepSeconds);
 
-        DataChunk chunk = new DataChunk(nameindex, start, startOffset, endOffset, step,
-                header.dsCount, rows);
+        DataChunk chunk = new DataChunk(nameindex, startTime, startOffset, endOffset,
+                stepSeconds, header.dsCount, rows);
 
         archive.loadData(chunk);
 
